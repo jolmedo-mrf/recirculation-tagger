@@ -18,23 +18,32 @@
     </div>
   </header>
 
-  <!-- Update notification -->
+  <!-- Update notification — phase 1: alert -->
   <div class="update-notice" id="update-notice" style="display:none">
     <div class="update-notice__header">
       <svg class="update-notice__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
-        <path d="M8 1v8M5 6l3 3 3-3M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/>
+        <circle cx="8" cy="8" r="7"/><path d="M8 4v5M8 11v1"/>
       </svg>
-      <strong>Version <span id="update-version"></span> available</strong>
+      <strong>Update available — v<span id="update-version"></span></strong>
     </div>
-    <p class="update-notice__desc">A new version has been downloaded to your Downloads folder.</p>
-    <ol class="update-notice__steps">
-      <li>Open your <strong>Downloads</strong> folder</li>
-      <li>Unzip <code id="update-filename"></code></li>
-      <li>Replace your current extension folder with the new <code>extension</code> folder inside</li>
-      <li>Go to <strong>chrome://extensions</strong> and click the reload button <span class="update-notice__reload-icon">&#8635;</span></li>
+    <div class="update-notice__actions">
+      <button class="btn btn--update btn--small" id="btn-download-update">Download update</button>
+      <button class="btn btn--ghost btn--small" id="btn-dismiss-update">Later</button>
+    </div>
+  </div>
+
+  <!-- Update notification — phase 2: instructions (after download) -->
+  <div class="update-instructions" id="update-instructions" style="display:none">
+    <div class="update-instructions__header">
+      <strong>Update downloaded! Follow these steps:</strong>
+    </div>
+    <ol class="update-instructions__steps">
+      <li>Open your <strong>Downloads</strong> folder and unzip <code id="update-filename"></code></li>
+      <li>Go to <code>chrome://extensions</code> <button class="btn--copy-url" id="btn-copy-chrome-url" title="Copy to clipboard">copy</button></li>
+      <li>Click <strong>Load unpacked</strong> and select the <code>extension</code> folder</li>
+      <li>Remove the old version (v<span id="update-old-version"></span>)</li>
     </ol>
-    <button class="btn btn--primary btn--small" id="btn-download-update">Download update</button>
-    <button class="btn btn--ghost btn--small" id="btn-dismiss-update">Dismiss</button>
+    <button class="btn btn--ghost btn--small" id="btn-dismiss-instructions">Got it</button>
   </div>
 
   <!-- Toolbar -->

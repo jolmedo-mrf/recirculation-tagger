@@ -51,8 +51,12 @@
   const updateNotice = document.getElementById('update-notice');
   const updateVersion = document.getElementById('update-version');
   const updateFilename = document.getElementById('update-filename');
+  const updateInstructions = document.getElementById('update-instructions');
   const btnDownloadUpdate = document.getElementById('btn-download-update');
   const btnDismissUpdate = document.getElementById('btn-dismiss-update');
+  const btnDismissInstructions = document.getElementById('btn-dismiss-instructions');
+  const btnCopyChromeUrl = document.getElementById('btn-copy-chrome-url');
+  const updateOldVersion = document.getElementById('update-old-version');
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -743,8 +747,10 @@
       remoteVersion: pendingUpdate.remoteVersion,
     });
     if (result?.success) {
-      btnDownloadUpdate.textContent = 'Downloaded!';
-      showToast('Update downloaded to your Downloads folder', 'success');
+      // Hide alert, show instructions
+      updateNotice.style.display = 'none';
+      updateOldVersion.textContent = pendingUpdate.localVersion;
+      updateInstructions.style.display = '';
     } else {
       btnDownloadUpdate.disabled = false;
       btnDownloadUpdate.textContent = 'Download update';
@@ -754,6 +760,16 @@
 
   btnDismissUpdate.addEventListener('click', () => {
     updateNotice.style.display = 'none';
+  });
+
+  btnDismissInstructions.addEventListener('click', () => {
+    updateInstructions.style.display = 'none';
+  });
+
+  btnCopyChromeUrl.addEventListener('click', () => {
+    navigator.clipboard.writeText('chrome://extensions');
+    btnCopyChromeUrl.textContent = 'copied!';
+    setTimeout(() => { btnCopyChromeUrl.textContent = 'copy'; }, 2000);
   });
 
   // ---------------------------------------------------------------------------

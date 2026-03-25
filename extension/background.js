@@ -103,7 +103,7 @@ chrome.runtime.onConnect.addListener((port) => {
 
 const GITHUB_REPO = 'jolmedo-mrf/recirculation-tagger';
 const MANIFEST_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/extension/manifest.json`;
-const ZIP_URL = `https://github.com/${GITHUB_REPO}/archive/refs/heads/main.zip`;
+const RELEASE_ZIP_URL = `https://github.com/${GITHUB_REPO}/releases/latest/download/recirculation-tagger-extension.zip`;
 
 async function checkForUpdate() {
   try {
@@ -123,7 +123,7 @@ async function checkForUpdate() {
 async function downloadUpdate(remoteVersion) {
   try {
     const downloadId = await chrome.downloads.download({
-      url: ZIP_URL,
+      url: RELEASE_ZIP_URL,
       filename: `recirculation-tagger-v${remoteVersion}.zip`,
       saveAs: false,
     });
