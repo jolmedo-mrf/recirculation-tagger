@@ -98,10 +98,60 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 // ---------------------------------------------------------------------------
+// Auto-update checker
+// ---------------------------------------------------------------------------
+
+const GITHUB_REPO = 'jolmedo-mrf/recirculation-tagger';
+const MANIFEST_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/extension/manifest.json`;
+const ZIP_URL = `https://github.com/${GITHUB_REPO}/archive/refs/heads/main.zip`;
+
+async function checkForUpdate() {
+  try {
+    const res = await fetch(MANIFEST_URL, { cache: 'no-store' });
+    if (!res.ok) return null;
+    const remote = await res.json();
+    const local = chrome.runtime.getManifest();
+    if (remote.version !== local.version) {
+      return { remoteVersion: remote.version, localVersion: local.version };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function downloadUpdate(remoteVersion) {
+  try {
+    const downloadId = await chrome.downloads.download({
+      url: ZIP_URL,
+      filename: `recirculation-tagger-v${remoteVersion}.zip`,
+      saveAs: false,
+    });
+    return { success: true, downloadId };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Message routing
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'MRT_CHECK_UPDATE') {
+    checkForUpdate()
+      .then(result => sendResponse(result))
+      .catch(() => sendResponse(null));
+    return true;
+  }
+
+  if (msg.type === 'MRT_DOWNLOAD_UPDATE') {
+    downloadUpdate(msg.remoteVersion)
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
   if (msg.type === 'MRT_SEND_TO_HUB') {
     handleSendToHub(msg.modules)
       .then(result => sendResponse(result))

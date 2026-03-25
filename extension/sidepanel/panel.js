@@ -48,6 +48,11 @@
   const multiselectCount = document.getElementById('multiselect-count');
   const btnFindPattern = document.getElementById('btn-find-pattern');
   const btnCancelMultiselect = document.getElementById('btn-cancel-multiselect');
+  const updateNotice = document.getElementById('update-notice');
+  const updateVersion = document.getElementById('update-version');
+  const updateFilename = document.getElementById('update-filename');
+  const btnDownloadUpdate = document.getElementById('btn-download-update');
+  const btnDismissUpdate = document.getElementById('btn-dismiss-update');
 
   // ---------------------------------------------------------------------------
   // Helpers
@@ -714,6 +719,44 @@
   });
 
   // ---------------------------------------------------------------------------
+  // Auto-update
+  // ---------------------------------------------------------------------------
+
+  let pendingUpdate = null;
+
+  async function checkForUpdate() {
+    const result = await chrome.runtime.sendMessage({ type: 'MRT_CHECK_UPDATE' });
+    if (result) {
+      pendingUpdate = result;
+      updateVersion.textContent = result.remoteVersion;
+      updateFilename.textContent = `recirculation-tagger-v${result.remoteVersion}.zip`;
+      updateNotice.style.display = '';
+    }
+  }
+
+  btnDownloadUpdate.addEventListener('click', async () => {
+    if (!pendingUpdate) return;
+    btnDownloadUpdate.disabled = true;
+    btnDownloadUpdate.textContent = 'Downloading...';
+    const result = await chrome.runtime.sendMessage({
+      type: 'MRT_DOWNLOAD_UPDATE',
+      remoteVersion: pendingUpdate.remoteVersion,
+    });
+    if (result?.success) {
+      btnDownloadUpdate.textContent = 'Downloaded!';
+      showToast('Update downloaded to your Downloads folder', 'success');
+    } else {
+      btnDownloadUpdate.disabled = false;
+      btnDownloadUpdate.textContent = 'Download update';
+      showToast('Download failed: ' + (result?.error || 'unknown error'), 'error');
+    }
+  });
+
+  btnDismissUpdate.addEventListener('click', () => {
+    updateNotice.style.display = 'none';
+  });
+
+  // ---------------------------------------------------------------------------
   // Init
   // ---------------------------------------------------------------------------
 
@@ -728,6 +771,8 @@
     await loadModules();
     // Always show coverage, even with 0 modules
     requestCoverage();
+    // Check for updates
+    checkForUpdate();
   }
 
   init();

@@ -18,6 +18,25 @@
     </div>
   </header>
 
+  <!-- Update notification -->
+  <div class="update-notice" id="update-notice" style="display:none">
+    <div class="update-notice__header">
+      <svg class="update-notice__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16">
+        <path d="M8 1v8M5 6l3 3 3-3M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/>
+      </svg>
+      <strong>Version <span id="update-version"></span> available</strong>
+    </div>
+    <p class="update-notice__desc">A new version has been downloaded to your Downloads folder.</p>
+    <ol class="update-notice__steps">
+      <li>Open your <strong>Downloads</strong> folder</li>
+      <li>Unzip <code id="update-filename"></code></li>
+      <li>Replace your current extension folder with the new <code>extension</code> folder inside</li>
+      <li>Go to <strong>chrome://extensions</strong> and click the reload button <span class="update-notice__reload-icon">&#8635;</span></li>
+    </ol>
+    <button class="btn btn--primary btn--small" id="btn-download-update">Download update</button>
+    <button class="btn btn--ghost btn--small" id="btn-dismiss-update">Dismiss</button>
+  </div>
+
   <!-- Toolbar -->
   <div class="toolbar">
     <button class="btn btn--primary btn--pick" id="btn-pick">
