@@ -1,0 +1,15 @@
+# Credentials
+.webstore-credentials.json
+
+# Packaged builds
+*.zip
+
+# Reports (generated per-analysis)
+reports/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude Code local config
+.claude/

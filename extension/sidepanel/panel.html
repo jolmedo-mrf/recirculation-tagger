@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recirculation Tagger</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="header__brand">
+      <img src="../icons/icon48.png" alt="Logo" class="header__logo" id="site-logo">
+      <div>
+        <h1 class="header__title" id="domain">—</h1>
+        <span class="header__subtitle" id="page-type">—</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <button class="btn btn--primary btn--pick" id="btn-pick">
+      <svg class="btn__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="8" r="6"/>
+        <circle cx="8" cy="8" r="2"/>
+        <line x1="8" y1="0.5" x2="8" y2="3"/>
+        <line x1="8" y1="13" x2="8" y2="15.5"/>
+        <line x1="0.5" y1="8" x2="3" y2="8"/>
+        <line x1="13" y1="8" x2="15.5" y2="8"/>
+      </svg>
+      <span id="pick-label">Select Element</span>
+    </button>
+    <button class="btn btn--ghost btn--small" id="btn-reload" title="Reload — detect current page">
+      <svg class="btn__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2.5 8a5.5 5.5 0 019.3-3.9M13.5 8a5.5 5.5 0 01-9.3 3.9"/>
+        <path d="M12 1v3.5h-3.5M4 15v-3.5h3.5"/>
+      </svg>
+    </button>
+    <button class="btn btn--ghost btn--small btn--clear" id="btn-clear" title="Clear all modules">
+      <svg class="btn__icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 4h12M5.5 4V2.5h5V4M6 7v5M10 7v5M3.5 4l.7 9.5a1 1 0 001 .9h5.6a1 1 0 001-.9L12.5 4"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Status -->
+  <div class="status" id="status">
+    Click <strong>Select Element</strong> then click on recirculation modules in the page.
+    <br><small>Hold <strong>⌥/Alt</strong> + scroll to expand/shrink. <strong>Shift+click</strong> for multi-select.</small>
+  </div>
+
+  <!-- Multi-select banner (hidden by default) -->
+  <div class="multiselect-banner" id="multiselect-banner" style="display:none">
+    <div class="multiselect-banner__info">
+      <span class="multiselect-banner__count" id="multiselect-count">0</span> elements selected
+    </div>
+    <div class="multiselect-banner__actions">
+      <button class="btn btn--primary btn--small" id="btn-find-pattern">Find Common Pattern</button>
+      <button class="btn btn--ghost btn--small" id="btn-cancel-multiselect">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Coverage ring -->
+  <div class="coverage" id="coverage" style="display:none">
+    <div class="coverage__ring-wrap">
+      <svg class="coverage__ring" viewBox="0 0 36 36">
+        <circle class="coverage__ring-bg" cx="18" cy="18" r="15.9" fill="none" stroke-width="3"/>
+        <!-- Marfeel segment (teal, rendered first = bottom layer) -->
+        <circle class="coverage__ring-segment coverage__ring-segment--marfeel" id="coverage-ring-marfeel"
+                cx="18" cy="18" r="15.9" fill="none" stroke-width="3"
+                stroke-dasharray="0 100" stroke-linecap="round" transform="rotate(-90 18 18)"/>
+        <!-- Tagged segment (blue, rendered on top) -->
+        <circle class="coverage__ring-segment coverage__ring-segment--tagged" id="coverage-ring-tagged"
+                cx="18" cy="18" r="15.9" fill="none" stroke-width="3"
+                stroke-dasharray="0 100" stroke-linecap="round" transform="rotate(-90 18 18)"/>
+      </svg>
+      <div class="coverage__center">
+        <span class="coverage__pct" id="coverage-pct">0%</span>
+        <span class="coverage__count" id="coverage-count">0/0</span>
+      </div>
+    </div>
+    <div class="coverage__legend" id="coverage-legend">
+      <div class="coverage__legend-item">
+        <span class="coverage__legend-dot coverage__legend-dot--tagged"></span>
+        <span class="coverage__legend-label">Tagged</span>
+        <span class="coverage__legend-value" id="legend-tagged">0</span>
+      </div>
+      <div class="coverage__legend-item">
+        <span class="coverage__legend-dot coverage__legend-dot--marfeel"></span>
+        <span class="coverage__legend-label">Marfeel</span>
+        <span class="coverage__legend-value" id="legend-marfeel">0</span>
+      </div>
+      <div class="coverage__legend-item">
+        <span class="coverage__legend-dot coverage__legend-dot--uncovered"></span>
+        <span class="coverage__legend-label">Uncovered</span>
+        <span class="coverage__legend-value" id="legend-uncovered">0</span>
+      </div>
+    </div>
+    <div class="coverage__toggles">
+      <label class="toggle" id="toggle-uncovered" title="Highlight uncovered links on page">
+        <input type="checkbox" class="toggle__input" id="chk-toggle-uncovered">
+        <span class="toggle__slider"></span>
+        <span class="toggle__label">Show uncovered</span>
+      </label>
+      <label class="toggle" id="toggle-marfeel" title="Show existing Marfeel modules on page">
+        <input type="checkbox" class="toggle__input" id="chk-toggle-marfeel">
+        <span class="toggle__slider toggle__slider--teal"></span>
+        <span class="toggle__label">Show Marfeel</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Module list -->
+  <div class="modules" id="modules">
+    <!-- Cards are rendered by panel.js -->
+  </div>
+
+  <!-- Empty state -->
+  <div class="empty-state" id="empty-state">
+    <svg class="empty-state__icon" viewBox="0 0 48 48" fill="none" stroke="#94a3b8" stroke-width="1.5">
+      <circle cx="24" cy="24" r="18"/>
+      <circle cx="24" cy="24" r="6"/>
+      <line x1="24" y1="2" x2="24" y2="10"/>
+      <line x1="24" y1="38" x2="24" y2="46"/>
+      <line x1="2" y1="24" x2="10" y2="24"/>
+      <line x1="38" y1="24" x2="46" y2="24"/>
+    </svg>
+    <p>No modules tagged yet</p>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer" id="footer">
+    <div class="footer__count">
+      <span id="module-count">0</span> module(s) tagged
+    </div>
+    <button class="btn btn--accent btn--send" id="btn-send" disabled>
+      Send to Hub
+      <svg class="btn__icon btn__icon--right" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M3 8h10M9 4l4 4-4 4"/>
+      </svg>
+    </button>
+  </footer>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="panel.js"></script>
+</body>
+</html>
