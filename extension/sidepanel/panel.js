@@ -9,12 +9,13 @@
   // State
   // ---------------------------------------------------------------------------
 
-  let modules = [];     // Array of { id, selector, name, category, matchCount }
+  let modules = [];     // Array of { id, selector, name, category, matchCount, layout?, collapsed? }
   let isPicking = false;
   let currentDomain = '';
   let nextId = 1;
   let showingUncovered = false;
   let showingMarfeel = false;
+  let currentPageType = 'Page';
 
   // ---------------------------------------------------------------------------
   // DOM refs
@@ -67,6 +68,18 @@
               .replace(/"/g, '&quot;');
   }
 
+  /**
+   * Merge two CSS selectors with comma, avoiding duplicates.
+   */
+  function mergeSelectors(a, b) {
+    if (!a) return b || '';
+    if (!b) return a;
+    if (a === b) return a;
+    const parts = new Set(a.split(',').map(s => s.trim()));
+    for (const p of b.split(',').map(s => s.trim())) parts.add(p);
+    return [...parts].join(', ');
+  }
+
   function showToast(text, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast toast--${type}`;
@@ -97,7 +110,7 @@
           if (tab) {
             await chrome.scripting.executeScript({
               target: { tabId: tab.id },
-              files: ['content/selector-engine.js', 'content/namer.js', 'content/picker.js'],
+              files: ['content/selector-engine.js', 'content/namer.js', 'content/layout-detector.js', 'content/picker.js'],
             });
             await chrome.scripting.insertCSS({
               target: { tabId: tab.id },
@@ -199,6 +212,7 @@
   async function updatePageType() {
     const resp = await sendToTab({ type: 'MRT_GET_PAGE_TYPE' });
     const type = resp?.pageType || 'Page';
+    currentPageType = type;
     pageTypeEl.textContent = PAGE_TYPE_LABELS[type] || type;
   }
 
@@ -215,6 +229,7 @@
     const data = modules.map(m => ({
       id: m.id, selector: m.selector, name: m.name,
       category: m.category, matchCount: m.matchCount,
+      layout: m.layout || null, collapsed: m.collapsed || false,
     }));
     await chrome.storage.local.set({ [storageKey()]: data });
   }
@@ -260,16 +275,112 @@
     requestCoverage();
   }
 
+  function buildLayoutHtml(layout, moduleName) {
+    if (!layout) return '';
+
+    const fields = [
+      { key: 'element', label: 'Element', critical: true },
+      { key: 'anchor',  label: 'Anchor',  critical: true },
+      { key: 'title',   label: 'Title',   critical: false },
+      { key: 'image',   label: 'Image',   critical: false },
+    ];
+
+    // Determine example count for unified navigator
+    const exampleCount = layout.element?.count || 0;
+
+    let html = `<div class="card__layout">
+      <div class="card__layout-header">
+        <span class="card__layout-title">Layout</span>
+      </div>`;
+
+    for (const f of fields) {
+      const data = layout[f.key];
+      const hasSelector = data?.selector;
+      const hasError = data?.error;
+      const warningClass = hasError
+        ? (f.critical ? 'layout-field__warning--critical' : 'layout-field__warning--amber')
+        : '';
+
+      if (hasSelector) {
+        let previewHtml = '';
+        const examples = data.examples || (data.example ? [data.example] : []);
+
+        if (f.key === 'element') {
+          previewHtml = '';
+        } else if (f.key === 'image' && examples.length) {
+          previewHtml = `<div class="layout-field__preview layout-field__preview--image" data-field="${f.key}">
+            <img class="layout-field__thumb" src="${escapeHtml(examples[0])}" alt="" onerror="this.style.display='none'">
+            <span class="layout-field__preview-text">${escapeHtml(examples[0].split('/').pop() || '')}</span>
+          </div>`;
+        } else if (f.key === 'anchor' && examples.length) {
+          previewHtml = `<div class="layout-field__preview layout-field__preview--anchor" data-field="${f.key}">
+            <svg class="layout-field__link-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12">
+              <path d="M6.5 9.5l3-3M7 11.5l-1.8 1.8a2 2 0 01-2.8 0l-.7-.7a2 2 0 010-2.8L3.5 8M9 4.5l1.8-1.8a2 2 0 012.8 0l.7.7a2 2 0 010 2.8L12.5 8"/>
+            </svg>
+            <a class="layout-field__link" href="${escapeHtml(examples[0])}" target="_blank" rel="noopener" title="${escapeHtml(examples[0])}">${escapeHtml(examples[0])}</a>
+          </div>`;
+        } else if (f.key === 'title' && examples.length) {
+          previewHtml = `<div class="layout-field__preview layout-field__preview--title" data-field="${f.key}">
+            <span class="layout-field__title-text">${escapeHtml(examples[0])}</span>
+          </div>`;
+        }
+
+        html += `
+          <div class="layout-field">
+            <div class="layout-field__header">
+              <span class="layout-field__label">${f.label}</span>
+              <input class="layout-field__selector" type="text"
+                     value="${escapeHtml(data.selector)}" spellcheck="false"
+                     data-field="${f.key}" data-original="${escapeHtml(data.selector)}" title="CSS selector (editable)">
+              <button class="layout-field__confirm" data-field="${f.key}" title="Apply selector" style="display:none">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12"><path d="M3 8.5l3.5 3.5 6.5-7"/></svg>
+              </button>
+              ${f.key === 'element' && data.count ? `<span class="layout-field__count">&times;${data.count}</span>` : ''}
+            </div>
+            ${previewHtml}
+          </div>`;
+      } else {
+        html += `
+          <div class="layout-field">
+            <div class="layout-field__header">
+              <span class="layout-field__label">${f.label}</span>
+              <input class="layout-field__selector" type="text" value=""
+                     placeholder="Enter selector manually"
+                     spellcheck="false" data-field="${f.key}" data-original="">
+              <button class="layout-field__confirm" data-field="${f.key}" title="Apply selector" style="display:none">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12"><path d="M3 8.5l3.5 3.5 6.5-7"/></svg>
+              </button>
+            </div>
+            <div class="layout-field__warning ${warningClass}">&#9888; ${hasError || 'Not detected'}</div>
+          </div>`;
+      }
+    }
+
+    // Navigator at the bottom, centered
+    if (exampleCount > 1) {
+      html += `<div class="layout-nav-wrap">
+        <span class="layout-nav" data-example-count="${exampleCount}">
+          <button class="layout-nav__btn" data-dir="-1" title="Previous example">&#9666;</button>
+          <span class="layout-nav__pos">1/${exampleCount}</span>
+          <button class="layout-nav__btn" data-dir="1" title="Next example">&#9656;</button>
+        </span>
+      </div>`;
+    }
+
+    html += '</div>';
+    return html;
+  }
+
   function createCard(mod) {
     const card = document.createElement('div');
-    card.className = 'card';
+    card.className = `card${mod.collapsed ? ' card--collapsed' : ''}`;
     card.dataset.id = mod.id;
-    card.style.borderLeftColor = mod.color || '#22c55e';
+    card.style.borderLeftColor = mod.color || '#059669';
     card.style.borderLeftWidth = '3px';
 
     const matchClass = mod.matchCount === 0 ? ' card__match--zero' : '';
     const overlapHtml = mod.overlaps?.length
-      ? `<div class="card__warning">⚠ Overlaps with: ${mod.overlaps.map(o => {
+      ? `<div class="card__warning">&#9888; Overlaps with: ${mod.overlaps.map(o => {
           const other = modules.find(m => m.selector === o.selector);
           return `<strong>${escapeHtml(other?.name || o.selector)}</strong> (${o.overlapCount})`;
         }).join(', ')}</div>`
@@ -290,8 +401,20 @@
         </div>`
       : '';
 
+    // Build inline layout HTML (only for Home/Section pages)
+    const hasLayout = mod.layout && (currentPageType === 'Home' || currentPageType === 'Section');
+    let layoutHtml = '';
+    if (hasLayout) {
+      layoutHtml = buildLayoutHtml(mod.layout);
+    }
+
     card.innerHTML = `
       <div class="card__header">
+        <button class="card__collapse" title="${mod.collapsed ? 'Expand' : 'Collapse'}">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+            <path d="${mod.collapsed ? 'M6 4l4 4-4 4' : 'M4 6l4 4 4-4'}"/>
+          </svg>
+        </button>
         <input class="card__name" type="text" value="${escapeHtml(mod.name)}"
                spellcheck="false" title="Module name (editable)">
         <button class="card__confirm-name" title="Confirm name" style="display:none">
@@ -299,32 +422,23 @@
             <path d="M3 8.5l3.5 3.5 6.5-7"/>
           </svg>
         </button>
+        <span class="card__match${matchClass}" title="Elements matching this selector">${mod.matchCount}</span>
         <button class="card__delete" title="Remove module">&times;</button>
       </div>
-      <div class="card__selector-row">
-        <input class="card__selector" type="text" value="${escapeHtml(mod.selector)}"
-               spellcheck="false" title="CSS selector (editable)">
-        <span class="card__match${matchClass}" title="Elements matching this selector"
-              style="${mod.matchCount > 0 ? `background:${mod.color}18;color:${mod.color}` : ''}">${mod.matchCount}</span>
-      </div>
-      ${overlapHtml}
-      ${altsHtml}
-      <div class="card__actions">
-        <button class="card__btn card__btn--locate" title="Scroll to element on page">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
-            <circle cx="8" cy="8" r="5"/><circle cx="8" cy="8" r="1.5"/>
-            <line x1="8" y1="1" x2="8" y2="4"/><line x1="8" y1="12" x2="8" y2="15"/>
-            <line x1="1" y1="8" x2="4" y2="8"/><line x1="12" y1="8" x2="15" y2="8"/>
-          </svg>
-          Locate
-        </button>
-        <button class="card__btn card__btn--copy" title="Copy selector to clipboard">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
-            <rect x="5" y="5" width="9" height="9" rx="1.5"/>
-            <path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5"/>
-          </svg>
-          Copy
-        </button>
+      <div class="card__body">
+        <div class="card__selector-row">
+          <input class="card__selector" type="text" value="${escapeHtml(mod.selector)}"
+                 spellcheck="false" title="CSS selector (editable)">
+          <button class="card__copy" title="Copy selector">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12">
+              <rect x="5" y="5" width="9" height="9" rx="1.5"/>
+              <path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5"/>
+            </svg>
+          </button>
+        </div>
+        ${overlapHtml}
+        ${altsHtml}
+        ${layoutHtml}
       </div>
     `;
 
@@ -332,9 +446,20 @@
     const nameInput = card.querySelector('.card__name');
     const selectorInput = card.querySelector('.card__selector');
     const deleteBtn = card.querySelector('.card__delete');
-    const locateBtn = card.querySelector('.card__btn--locate');
-    const copyBtn = card.querySelector('.card__btn--copy');
-    const matchBadge = card.querySelector('.card__match');
+    const copyBtn = card.querySelector('.card__copy');
+    const collapseBtn = card.querySelector('.card__collapse');
+
+    // Collapse toggle
+    collapseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      mod.collapsed = !mod.collapsed;
+      card.classList.toggle('card--collapsed', mod.collapsed);
+      collapseBtn.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+        <path d="${mod.collapsed ? 'M6 4l4 4-4 4' : 'M4 6l4 4 4-4'}"/>
+      </svg>`;
+      collapseBtn.title = mod.collapsed ? 'Expand' : 'Collapse';
+      saveModules();
+    });
 
     // Edit name — confirm via Enter key or confirm button
     const confirmNameBtn = card.querySelector('.card__confirm-name');
@@ -415,15 +540,210 @@
       saveModules();
     });
 
-    // Locate on page
-    locateBtn.addEventListener('click', () => {
-      sendToTab({ type: 'MRT_HIGHLIGHT', selector: mod.selector });
-    });
-
-    // Copy selector
+    // Inline copy button
     copyBtn.addEventListener('click', () => {
       navigator.clipboard.writeText(mod.selector);
-      showToast('Selector copied!');
+      copyBtn.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="#059669" stroke-width="2" width="12" height="12"><path d="M3 8.5l3.5 3.5 6.5-7"/></svg>`;
+      setTimeout(() => {
+        copyBtn.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5"/></svg>`;
+      }, 1500);
+    });
+
+    // Layout field editing — apply on confirm button or Enter
+    card.querySelectorAll('.layout-field__selector').forEach(input => {
+      const field = input.dataset.field;
+      const confirmBtn = card.querySelector(`.layout-field__confirm[data-field="${field}"]`);
+
+      // Show/hide confirm button when input value changes
+      input.addEventListener('input', () => {
+        const changed = input.value.trim() !== (input.dataset.original || '');
+        if (confirmBtn) confirmBtn.style.display = changed ? '' : 'none';
+      });
+
+      // Enter key triggers apply
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          applyLayoutField(input, field, confirmBtn);
+        }
+      });
+
+      // Confirm button triggers apply
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          applyLayoutField(input, field, confirmBtn);
+        });
+      }
+    });
+
+    async function applyLayoutField(input, field, confirmBtn) {
+      const value = input.value.trim();
+      if (!mod.layout) return;
+
+      // Update the stored selector
+      if (mod.layout[field]) {
+        mod.layout[field].selector = value || null;
+      } else {
+        mod.layout[field] = { selector: value || null };
+      }
+
+      // Update original to track future changes
+      input.dataset.original = value;
+      if (confirmBtn) confirmBtn.style.display = 'none';
+
+      if (!value) {
+        // Clear preview and examples when selector is emptied
+        if (mod.layout[field]) {
+          mod.layout[field].examples = [];
+          mod.layout[field].count = 0;
+        }
+        const layoutEl = card.querySelector('.card__layout');
+        const fieldEl = [...layoutEl.querySelectorAll('.layout-field')]
+          .find(f => f.querySelector(`[data-field="${field}"]`));
+        if (fieldEl) {
+          const preview = fieldEl.querySelector('.layout-field__preview');
+          if (preview) preview.remove();
+          const countEl = fieldEl.querySelector('.layout-field__count');
+          if (countEl) countEl.remove();
+          // Show warning
+          const existing = fieldEl.querySelector('.layout-field__warning');
+          if (!existing) {
+            const warn = document.createElement('div');
+            const critical = field === 'element' || field === 'anchor';
+            warn.className = `layout-field__warning ${critical ? 'layout-field__warning--critical' : 'layout-field__warning--amber'}`;
+            warn.innerHTML = '&#9888; Not detected';
+            fieldEl.appendChild(warn);
+          }
+        }
+        saveModules();
+        return;
+      }
+
+      // Ask content script to preview this selector
+      const result = await sendToTab({
+        type: 'MRT_PREVIEW_LAYOUT_FIELD',
+        moduleSelector: mod.selector,
+        fieldSelector: value,
+        field,
+      });
+
+      if (!result?.success) {
+        input.style.borderColor = 'var(--error)';
+        setTimeout(() => { input.style.borderColor = ''; }, 1500);
+        return;
+      }
+
+      // Update examples in layout data
+      mod.layout[field].examples = result.examples;
+      if (field === 'element' && result.count !== undefined) {
+        mod.layout[field].count = result.count;
+      }
+      saveModules();
+
+      // Update preview in the DOM
+      const layoutEl = card.querySelector('.card__layout');
+      const fieldEl = [...layoutEl.querySelectorAll('.layout-field')]
+        .find(f => f.querySelector(`[data-field="${field}"]`));
+      if (!fieldEl) return;
+
+      // Remove existing warning
+      const warning = fieldEl.querySelector('.layout-field__warning');
+      if (warning) warning.remove();
+
+      // Update or create preview
+      let preview = fieldEl.querySelector('.layout-field__preview');
+      if (field === 'element') {
+        const countEl = fieldEl.querySelector('.layout-field__count');
+        if (countEl) {
+          countEl.textContent = `×${result.count}`;
+        } else if (result.count) {
+          const header = fieldEl.querySelector('.layout-field__header');
+          const badge = document.createElement('span');
+          badge.className = 'layout-field__count';
+          badge.textContent = `×${result.count}`;
+          header.appendChild(badge);
+        }
+      } else if (field === 'image' && result.examples.length) {
+        if (preview) {
+          const img = preview.querySelector('.layout-field__thumb');
+          const text = preview.querySelector('.layout-field__preview-text');
+          if (img) { img.src = result.examples[0]; img.style.display = ''; }
+          if (text) text.textContent = result.examples[0].split('/').pop() || '';
+        } else {
+          const div = document.createElement('div');
+          div.className = 'layout-field__preview layout-field__preview--image';
+          div.dataset.field = field;
+          div.innerHTML = `<img class="layout-field__thumb" src="${escapeHtml(result.examples[0])}" alt="" onerror="this.style.display='none'">
+            <span class="layout-field__preview-text">${escapeHtml(result.examples[0].split('/').pop() || '')}</span>`;
+          fieldEl.appendChild(div);
+        }
+      } else if (field === 'anchor' && result.examples.length) {
+        if (preview) {
+          const link = preview.querySelector('.layout-field__link');
+          if (link) { link.href = result.examples[0]; link.textContent = result.examples[0]; link.title = result.examples[0]; }
+        } else {
+          const div = document.createElement('div');
+          div.className = 'layout-field__preview layout-field__preview--anchor';
+          div.dataset.field = field;
+          div.innerHTML = `<svg class="layout-field__link-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="12" height="12">
+            <path d="M6.5 9.5l3-3M7 11.5l-1.8 1.8a2 2 0 01-2.8 0l-.7-.7a2 2 0 010-2.8L3.5 8M9 4.5l1.8-1.8a2 2 0 012.8 0l.7.7a2 2 0 010 2.8L12.5 8"/>
+          </svg>
+          <a class="layout-field__link" href="${escapeHtml(result.examples[0])}" target="_blank" rel="noopener" title="${escapeHtml(result.examples[0])}">${escapeHtml(result.examples[0])}</a>`;
+          fieldEl.appendChild(div);
+        }
+      } else if (field === 'title' && result.examples.length) {
+        if (preview) {
+          const text = preview.querySelector('.layout-field__title-text');
+          if (text) text.textContent = result.examples[0];
+        } else {
+          const div = document.createElement('div');
+          div.className = 'layout-field__preview layout-field__preview--title';
+          div.dataset.field = field;
+          div.innerHTML = `<span class="layout-field__title-text">${escapeHtml(result.examples[0])}</span>`;
+          fieldEl.appendChild(div);
+        }
+      }
+
+      // Flash success
+      input.style.borderColor = 'var(--success)';
+      setTimeout(() => { input.style.borderColor = ''; }, 1000);
+    }
+
+    // Unified layout example navigator
+    card.querySelectorAll('.layout-nav__btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const nav = btn.closest('.layout-nav');
+        const total = parseInt(nav.dataset.exampleCount);
+        const dir = parseInt(btn.dataset.dir);
+        const posEl = nav.querySelector('.layout-nav__pos');
+        const current = parseInt(posEl.textContent.split('/')[0]) - 1;
+        const next = (current + dir + total) % total;
+        posEl.textContent = `${next + 1}/${total}`;
+
+        // Update all previews at once
+        const layoutEl = card.querySelector('.card__layout');
+        for (const field of ['anchor', 'title', 'image']) {
+          const examples = mod.layout?.[field]?.examples || [];
+          if (next >= examples.length) continue;
+          const preview = layoutEl.querySelector(`.layout-field__preview[data-field="${field}"]`);
+          if (!preview) continue;
+
+          if (field === 'image') {
+            const img = preview.querySelector('.layout-field__thumb');
+            const text = preview.querySelector('.layout-field__preview-text');
+            if (img) { img.src = examples[next]; img.style.display = ''; }
+            if (text) text.textContent = examples[next].split('/').pop() || '';
+          } else if (field === 'anchor') {
+            const link = preview.querySelector('.layout-field__link');
+            if (link) { link.href = examples[next]; link.textContent = examples[next]; link.title = examples[next]; }
+          } else if (field === 'title') {
+            const text = preview.querySelector('.layout-field__title-text');
+            if (text) text.textContent = examples[next];
+          }
+        }
+      });
     });
 
     // Alternatives dropdown
@@ -451,6 +771,16 @@
           });
           mod.matchCount = resp?.matchCount ?? 0;
           mod.overlaps = resp?.overlaps || [];
+
+          // Re-detect layout with the new selector
+          if (currentPageType === 'Home' || currentPageType === 'Section') {
+            const layoutResult = await sendToTab({
+              type: 'MRT_DETECT_LAYOUT',
+              moduleSelector: newSelector,
+            });
+            mod.layout = layoutResult?.success ? layoutResult : null;
+          }
+
           renderModules();
           saveModules();
         });
@@ -515,7 +845,7 @@
     currentDomain = await getDomain();
     domainEl.textContent = currentDomain || '—';
     updateSiteLogo(currentDomain);
-    updatePageType();
+    await updatePageType();
     await loadModules();
     requestCoverage();
     showToast(`Loaded: ${currentDomain || 'unknown'}`, 'info');
@@ -533,11 +863,36 @@
     btnSend.textContent = 'Sending...';
 
     const payload = modules.map(m => ({ selector: m.selector, name: m.name }));
+    // Build layouts, merging those with the same Element selector
+    const rawLayouts = modules
+      .filter(m => m.layout)
+      .map(m => ({
+        element: m.layout.element?.selector || '',
+        anchor: m.layout.anchor?.selector || '',
+        title: m.layout.title?.selector || '',
+        image: m.layout.image?.selector || '',
+      }))
+      .filter(l => l.element && l.anchor);
+
+    // Merge layouts by element: concatenate anchor/title/image with comma
+    const mergedMap = new Map();
+    for (const l of rawLayouts) {
+      if (mergedMap.has(l.element)) {
+        const existing = mergedMap.get(l.element);
+        existing.anchor = mergeSelectors(existing.anchor, l.anchor);
+        existing.title = mergeSelectors(existing.title, l.title);
+        existing.image = mergeSelectors(existing.image, l.image);
+      } else {
+        mergedMap.set(l.element, { ...l });
+      }
+    }
+    const layoutPayload = [...mergedMap.values()];
 
     try {
       const response = await chrome.runtime.sendMessage({
         type: 'MRT_SEND_TO_HUB',
         modules: payload,
+        layouts: layoutPayload,
       });
 
       if (response?.success) {
@@ -562,6 +917,11 @@
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === 'MRT_ELEMENT_SELECTED') {
+      // Collapse all existing modules before adding new one
+      for (const m of modules) {
+        m.collapsed = true;
+      }
+
       const mod = {
         id: nextId++,
         selector: msg.selector,
@@ -570,7 +930,8 @@
         matchCount: msg.matchCount,
         overlaps: msg.overlaps || [],
         alternatives: msg.alternatives || [],
-        color: msg.color || '#22c55e',
+        color: msg.color || '#059669',
+        collapsed: false,
       };
       modules.push(mod);
 
@@ -595,6 +956,23 @@
 
       renderModules();
       saveModules();
+
+      // Auto-detect layout on Home/Section pages
+      if (currentPageType === 'Home' || currentPageType === 'Section') {
+        sendToTab({ type: 'MRT_DETECT_LAYOUT', moduleSelector: mod.selector })
+          .then(result => {
+            if (result && result.success) {
+              mod.layout = {
+                element: result.element,
+                anchor: result.anchor,
+                title: result.title,
+                image: result.image,
+              };
+              renderModules();
+              saveModules();
+            }
+          });
+      }
 
       // Scroll to the new card
       const lastCard = modulesEl.lastElementChild;
@@ -644,6 +1022,18 @@
   btnPick.addEventListener('click', togglePicking);
   btnReload.addEventListener('click', reload);
   btnSend.addEventListener('click', sendToHub);
+
+  // Stop picking when user interacts with panel elements (not the pick button itself)
+  document.addEventListener('click', (e) => {
+    if (!isPicking) return;
+    // Don't stop picking when clicking the pick button itself or multiselect buttons
+    if (e.target.closest('#btn-pick') || e.target.closest('#btn-find-pattern') ||
+        e.target.closest('#btn-cancel-multiselect')) return;
+    // Stop picking when clicking on other interactive elements
+    if (e.target.closest('.card, .btn, input, button')) {
+      stopPicking();
+    }
+  }, true);
 
   // Clear all — double-click confirm
   let clearConfirmTimer = null;
@@ -783,7 +1173,7 @@
     currentDomain = await getDomain();
     domainEl.textContent = currentDomain || '—';
     updateSiteLogo(currentDomain);
-    updatePageType();
+    await updatePageType();
     await loadModules();
     // Always show coverage, even with 0 modules
     requestCoverage();

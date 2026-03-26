@@ -105,13 +105,23 @@ const GITHUB_REPO = 'jolmedo-mrf/recirculation-tagger';
 const MANIFEST_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/extension/manifest.json`;
 const RELEASE_ZIP_URL = `https://github.com/${GITHUB_REPO}/releases/latest/download/recirculation-tagger-extension.zip`;
 
+function isNewerVersion(remote, local) {
+  const r = remote.split('.').map(Number);
+  const l = local.split('.').map(Number);
+  for (let i = 0; i < Math.max(r.length, l.length); i++) {
+    if ((r[i] || 0) > (l[i] || 0)) return true;
+    if ((r[i] || 0) < (l[i] || 0)) return false;
+  }
+  return false;
+}
+
 async function checkForUpdate() {
   try {
     const res = await fetch(MANIFEST_URL, { cache: 'no-store' });
     if (!res.ok) return null;
     const remote = await res.json();
     const local = chrome.runtime.getManifest();
-    if (remote.version !== local.version) {
+    if (remote.version !== local.version && isNewerVersion(remote.version, local.version)) {
       return { remoteVersion: remote.version, localVersion: local.version };
     }
     return null;
@@ -153,14 +163,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'MRT_SEND_TO_HUB') {
-    handleSendToHub(msg.modules)
+    handleSendToHub(msg.modules, msg.layouts)
       .then(result => sendResponse(result))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true; // async response
   }
 });
 
-async function handleSendToHub(modules) {
+async function handleSendToHub(modules, layouts) {
   if (!modules || !modules.length) {
     return { success: false, error: 'No modules to send.' };
   }
@@ -183,6 +193,7 @@ async function handleSendToHub(modules) {
     chrome.tabs.sendMessage(tab.id, {
       type: 'MRT_AUTOFILL',
       modules,
+      layouts: layouts || [],
     }, (response) => {
       if (chrome.runtime.lastError) {
         resolve({

@@ -146,18 +146,102 @@
   // Selection overlays (persistent green outlines for selected modules)
   // ---------------------------------------------------------------------------
 
-  // Color palette for module overlays — avoids blue (hover) and orange (multi-select)
+  // Color palette for module overlays — WCAG AA accessible on both light & dark backgrounds
+  // All colors: ≥3:1 vs white (border/label), ≥3:1 vs dark (#1a1a1a), pairwise distinct (>120)
   const MODULE_COLORS = [
-    { border: '#22c55e', bg: 'rgba(34,197,94,0.07)',  label: '#22c55e' },  // green
-    { border: '#8b5cf6', bg: 'rgba(139,92,246,0.07)', label: '#8b5cf6' },  // violet
-    { border: '#06b6d4', bg: 'rgba(6,182,212,0.07)',  label: '#06b6d4' },  // cyan
-    { border: '#ec4899', bg: 'rgba(236,72,153,0.07)', label: '#ec4899' },  // pink
-    { border: '#ef4444', bg: 'rgba(239,68,68,0.07)',  label: '#ef4444' },  // red
-    { border: '#14b8a6', bg: 'rgba(20,184,166,0.07)', label: '#14b8a6' },  // teal
-    { border: '#a855f7', bg: 'rgba(168,85,247,0.07)', label: '#a855f7' },  // purple
-    { border: '#84cc16', bg: 'rgba(132,204,22,0.07)', label: '#84cc16' },  // lime
+    { border: '#059669', bg: 'rgba(5,150,105,0.07)',   label: '#059669' },  // emerald
+    { border: '#2563eb', bg: 'rgba(37,99,235,0.07)',   label: '#2563eb' },  // blue
+    { border: '#e11d48', bg: 'rgba(225,29,72,0.07)',   label: '#e11d48' },  // rose
+    { border: '#7c3aed', bg: 'rgba(124,58,237,0.07)',  label: '#7c3aed' },  // violet
+    { border: '#0891b2', bg: 'rgba(8,145,178,0.07)',   label: '#0891b2' },  // cyan
+    { border: '#c026d3', bg: 'rgba(192,38,211,0.07)',  label: '#c026d3' },  // fuchsia
+    { border: '#d97706', bg: 'rgba(217,119,6,0.07)',   label: '#d97706' },  // amber
+    { border: '#64748b', bg: 'rgba(100,116,139,0.07)', label: '#64748b' },  // slate
   ];
   let colorIndex = 0;
+
+  // ---------------------------------------------------------------------------
+  // Contrast-checking utility — ensures labels are readable on any background
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Parse a hex color to {r, g, b} (0-255).
+   */
+  function hexToRgb(hex) {
+    const h = hex.replace('#', '');
+    return {
+      r: parseInt(h.slice(0, 2), 16),
+      g: parseInt(h.slice(2, 4), 16),
+      b: parseInt(h.slice(4, 6), 16),
+    };
+  }
+
+  /**
+   * Relative luminance per WCAG 2.x.
+   */
+  function luminance({ r, g, b }) {
+    const [rs, gs, bs] = [r, g, b].map(c => {
+      const s = c / 255;
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+  }
+
+  /**
+   * WCAG contrast ratio between two {r,g,b} colors.
+   */
+  function contrastRatio(c1, c2) {
+    const l1 = luminance(c1);
+    const l2 = luminance(c2);
+    const lighter = Math.max(l1, l2);
+    const darker = Math.min(l1, l2);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  /**
+   * Get the effective background color of an element by walking up the DOM.
+   * Returns {r, g, b} — defaults to white if fully transparent.
+   */
+  function getEffectiveBgColor(el) {
+    let node = el;
+    while (node && node !== document.documentElement) {
+      const bg = getComputedStyle(node).backgroundColor;
+      if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
+        const match = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (match) {
+          const a = bg.includes('rgba') ? parseFloat(bg.match(/,\s*([\d.]+)\)$/)?.[1] || '1') : 1;
+          if (a > 0.5) return { r: +match[1], g: +match[2], b: +match[3] };
+        }
+      }
+      node = node.parentElement;
+    }
+    return { r: 255, g: 255, b: 255 }; // default white
+  }
+
+  /**
+   * Adjust a label element's styling to ensure readability against the page background.
+   * If the label color has poor contrast vs the bg, adds a text-shadow for legibility.
+   * If the border has poor contrast, increases border width.
+   */
+  function ensureOverlayContrast(overlay, label, colorHex, targetEl) {
+    const bgColor = getEffectiveBgColor(targetEl);
+    const fgColor = hexToRgb(colorHex);
+    const ratio = contrastRatio(fgColor, bgColor);
+
+    // Label: white text on colored bg — check if label bg has enough contrast vs page bg
+    const labelVsBg = contrastRatio(fgColor, bgColor);
+    if (labelVsBg < 2.5) {
+      // Label blends into page background — add dark outline for visibility
+      label.style.boxShadow = '0 1px 3px rgba(0,0,0,0.4)';
+      label.style.border = '1px solid rgba(0,0,0,0.2)';
+    }
+
+    // Border: if poor contrast vs background, make it thicker and more opaque
+    if (ratio < 3.0) {
+      overlay.style.borderWidth = '3px';
+      overlay.style.boxShadow = `inset 0 0 0 1px ${colorHex}, 0 0 0 1px rgba(0,0,0,0.15)`;
+    }
+  }
 
   /**
    * Add overlays for ALL elements matching a selector.
@@ -194,6 +278,7 @@
 
       document.documentElement.appendChild(overlay);
       positionSelectedOverlay(overlay, matchEl);
+      ensureOverlayContrast(overlay, label, color.border, matchEl);
       overlays.push(overlay);
     });
 
@@ -377,7 +462,7 @@
     const overlaps = window.MRTSelectorEngine.checkOverlaps(selector, existingSelectors);
 
     addSelectedOverlay(el, selector, prefixedName);
-    const assignedColor = selectedModules[selectedModules.length - 1]?.color?.border || '#22c55e';
+    const assignedColor = selectedModules[selectedModules.length - 1]?.color?.border || '#059669';
 
     chrome.runtime.sendMessage({
       type: 'MRT_ELEMENT_SELECTED',
@@ -427,7 +512,7 @@
 
       const firstEl = multiSelectBuffer[0];
       addSelectedOverlay(firstEl, best.selector, prefixedName);
-      const assignedColor = selectedModules[selectedModules.length - 1]?.color?.border || '#22c55e';
+      const assignedColor = selectedModules[selectedModules.length - 1]?.color?.border || '#059669';
 
       chrome.runtime.sendMessage({
         type: 'MRT_ELEMENT_SELECTED',
@@ -853,8 +938,16 @@
 
       case 'MRT_RECOUNT': {
         const matchCount = window.MRTSelectorEngine.countMatches(msg.selector);
-        const existingSelectors = selectedModules.map(m => m.selector);
-        const overlaps = window.MRTSelectorEngine.checkOverlaps(msg.selector, existingSelectors);
+        // Update selectedModules with new selector before checking overlaps
+        if (msg.oldSelector && msg.oldSelector !== msg.selector) {
+          const modEntry = selectedModules.find(m => m.selector === msg.oldSelector);
+          if (modEntry) modEntry.selector = msg.selector;
+        }
+        // Exclude own selector from overlap check
+        const otherSelectors = selectedModules
+          .map(m => m.selector)
+          .filter(s => s !== msg.selector);
+        const overlaps = window.MRTSelectorEngine.checkOverlaps(msg.selector, otherSelectors);
         // Refresh overlays for this selector
         removeSelectedOverlay(msg.oldSelector || msg.selector);
         if (matchCount > 0) {

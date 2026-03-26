@@ -24,6 +24,8 @@ window.MRTSelectorEngine = (() => {
     'hidden', 'visible', 'block', 'inline', 'relative', 'absolute',
     'overflow-', 'z-', 'cursor-', 'transition-', 'transform-',
     'animate-', 'duration-', 'ease-', 'delay-',
+    'justify-', 'align-', 'order-', 'gap-', 'float-', 'position-',
+    'display-', 'vertical-', 'no-gutters', 'g-', 'gx-', 'gy-',
   ];
 
   const UTILITY_EXACT = new Set([
@@ -168,6 +170,28 @@ window.MRTSelectorEngine = (() => {
   }
 
   /**
+   * Detect if an <a> tag IS a standalone module (not one of several items).
+   * An <a> is a module only when it has no sibling <a> with the same structure
+   * (i.e., it's not a repeated item in a list).
+   */
+  function isModuleLink(el) {
+    if (el.tagName !== 'A') return false;
+    // Must contain substantial content (article, heading+image)
+    const hasArticle = el.querySelector('article');
+    const hasHeading = el.querySelector('h1, h2, h3, h4, h5, h6');
+    const hasImage = el.querySelector('img, picture');
+    if (!hasArticle && !(hasHeading && hasImage)) return false;
+    // Check if there are sibling <a> tags with similar structure (= repeated items)
+    const parent = el.parentElement;
+    if (!parent) return true;
+    const siblingLinks = [...parent.children].filter(
+      c => c.tagName === 'A' && c !== el && c.querySelector('article, h1, h2, h3, h4, h5, h6')
+    );
+    // If there are similar siblings, this <a> is an item, not a module
+    return siblingLinks.length === 0;
+  }
+
+  /**
    * When the clicked element has no selector (utility-only classes),
    * check if a direct child has a good unique selector.
    * e.g., user clicks div.container but div.four-news-big is the real module.
@@ -230,8 +254,11 @@ window.MRTSelectorEngine = (() => {
 
   function generateSelector(el) {
     // Regular content links should walk up to their container.
-    // But CTA/affiliate/subscription links ARE the module — keep them.
-    if (el.tagName === 'A' && !isCtaLink(el)) {
+    // But keep <a> tags that ARE the module itself:
+    //   - CTA/affiliate links
+    //   - Links with data-mrf-recirculation attribute
+    //   - Links wrapping substantial content (article, heading + image)
+    if (el.tagName === 'A' && !isCtaLink(el) && !isModuleLink(el)) {
       el = el.parentElement;
       if (!el || el === document.documentElement || el === document.body) return null;
     }

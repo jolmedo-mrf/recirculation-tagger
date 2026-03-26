@@ -1,4 +1,5 @@
-/* Marfeel Recirculation Tagger — Overlay Styles */
+/* Marfeel Recirculation Tagger — Overlay Styles
+   WCAG AA accessible palette — all colors ≥3:1 on both light and dark backgrounds */
 
 .mrt-overlay {
   outline-offset: -2px;
@@ -7,27 +8,27 @@
 }
 
 .mrt-overlay--recirculation {
-  outline: 3px solid rgba(34, 197, 94, 0.8); /* green */
+  outline: 3px solid rgba(5, 150, 105, 0.85); /* emerald */
 }
 
 .mrt-overlay--body_links {
-  outline: 3px solid rgba(59, 130, 246, 0.8); /* blue */
+  outline: 3px solid rgba(37, 99, 235, 0.85); /* blue */
 }
 
 .mrt-overlay--navigation {
-  outline: 3px solid rgba(156, 163, 175, 0.6); /* gray */
+  outline: 3px solid rgba(100, 116, 139, 0.75); /* slate */
 }
 
 .mrt-overlay--cta {
-  outline: 3px solid rgba(168, 85, 247, 0.8); /* purple */
+  outline: 3px solid rgba(124, 58, 237, 0.85); /* violet */
 }
 
 .mrt-overlay--affiliate {
-  outline: 3px solid rgba(249, 115, 22, 0.8); /* orange */
+  outline: 3px solid rgba(217, 119, 6, 0.85); /* amber */
 }
 
 .mrt-overlay--uncovered {
-  outline: 3px dashed rgba(239, 68, 68, 0.8); /* red dashed */
+  outline: 3px dashed rgba(225, 29, 72, 0.85); /* rose dashed */
 }
 
 .mrt-overlay--highlight {
@@ -56,9 +57,9 @@
   text-overflow: ellipsis;
 }
 
-.mrt-label--recirculation { background: rgba(34, 197, 94, 0.9); }
-.mrt-label--body_links { background: rgba(59, 130, 246, 0.9); }
-.mrt-label--navigation { background: rgba(156, 163, 175, 0.9); }
-.mrt-label--cta { background: rgba(168, 85, 247, 0.9); }
-.mrt-label--affiliate { background: rgba(249, 115, 22, 0.9); }
-.mrt-label--uncovered { background: rgba(239, 68, 68, 0.9); }
+.mrt-label--recirculation { background: rgba(5, 150, 105, 0.92); }
+.mrt-label--body_links { background: rgba(37, 99, 235, 0.92); }
+.mrt-label--navigation { background: rgba(100, 116, 139, 0.92); }
+.mrt-label--cta { background: rgba(124, 58, 237, 0.92); }
+.mrt-label--affiliate { background: rgba(217, 119, 6, 0.92); }
+.mrt-label--uncovered { background: rgba(225, 29, 72, 0.92); }

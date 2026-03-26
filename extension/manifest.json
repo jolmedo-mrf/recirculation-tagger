@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Marfeel Recirculation Tagger",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Tag recirculation modules visually and autofill the Hub Tag Experience form.",
   "permissions": [
     "activeTab",
@@ -35,6 +35,7 @@
       "js": [
         "content/selector-engine.js",
         "content/namer.js",
+        "content/layout-detector.js",
         "content/picker.js"
       ],
       "css": ["content/picker.css"],
