@@ -61,3 +61,7 @@ The persistent extension UI docked next to the page. It is where tags accumulate
 ## Tag Experience
 
 The configuration object inside the Marfeel Hub that describes how recirculation is to be detected and delivered for a given tenant. The extension's output is consumed by this object — each tagged module becomes a selector entry in a Tag Experience.
+
+## Export bundle
+
+A self-contained JSON artifact written to the operator's disk that captures every tag on the current page plus the minimal page context needed to interpret them later — hostname, URL, page type, capture timestamp, extension version. The export bundle is the read-only counterpart to *Hub autofill*: instead of pushing tags into the Hub, it serialises them for offline review, peer cross-check, or attachment to a bug report. The bundle does not round-trip — there is no import path back into the extension at this stage.
